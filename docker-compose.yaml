@@ -24,6 +24,11 @@ services:
       # Server-level settings overrides
       - ./clickhouse/join_use_nulls.xml:/etc/clickhouse-server/users.d/join_use_nulls.xml:ro
 
+    # First-init scripts. Used to create the development database.
+    configs:
+      - source: clickhouse_init_dev_db # defined in the `configs:` section at the bottom of this file
+        target: /docker-entrypoint-initdb.d/01-create-dev-db.sh
+
     environment:
       - CLICKHOUSE_USER=${CLICKHOUSE_USER}
       - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD}
@@ -195,6 +200,15 @@ services:
 volumes:
   clickhouse-data:
   clickhouse-logs:
+
+
+# ── Inline configs ───────────────────────────────────────────────
+# Creates the development ClickHouse database on first run.
+configs:
+  clickhouse_init_dev_db:
+    content: |
+      #!/bin/bash
+      clickhouse-client -n --query "CREATE DATABASE IF NOT EXISTS ${CLICKHOUSE_DEV_DB}"
 
 
 # ── Internal network ─────────────────────────────────────────────

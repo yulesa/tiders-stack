@@ -1,7 +1,7 @@
 # Root Makefile — orchestrates per-project pipelines.
 # Each project under projects/<name>.mk must define <name>-ingest and <name>-dbt targets.
 
-PROJECTS := aave_v4 uniswap_v3
+PROJECTS := polymarket_v2
 
 INGEST_TARGETS    := $(addsuffix -ingest,$(PROJECTS))
 DBT_TARGETS       := $(addsuffix -dbt,$(PROJECTS))
