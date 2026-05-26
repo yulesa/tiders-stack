@@ -1,0 +1,50 @@
+tiders:
+  target: dev
+  outputs:
+    # ── dev ────────────────────────────────────────────────────────
+    # Default target. Writes mart/intermediate models into a personal
+    # dev database so you never touch production tables.
+    #
+    # Set CLICKHOUSE_DEV_DB in your .env (or export it) to pick the
+    # database name. Falls back to "tiders_dev" if unset.
+    #
+    # Sources (raw/staging) still read from the production database
+    # defined in _sources.yml — only the models you build land in
+    # the dev schema.
+    #
+    # Usage:
+    #   docker compose exec dbt dbt run           # writes to dev db
+    #   docker compose exec dbt dbt run --select my_model
+    dev:
+      type: clickhouse
+      host: "{{ env_var('CLICKHOUSE_HOST', 'clickhouse') }}"
+      port: "{{ env_var('CLICKHOUSE_PORT', '8123') | int }}"
+      user: "{{ env_var('CLICKHOUSE_USER', 'default') }}"
+      password: "{{ env_var('CLICKHOUSE_PASSWORD', '') }}"
+      schema: "{{ env_var('CLICKHOUSE_DEV_DB', 'tiders_dev') }}"
+      secure: "{{ env_var('CLICKHOUSE_SECURE', 'false') | lower == 'true' }}"
+      driver: http
+      threads: 4
+      connect_timeout: 10
+      send_receive_timeout: 300
+      custom_settings:
+        join_use_nulls: 1
+
+    # ── prod ───────────────────────────────────────────────────────
+    # Writes into the production database. Must be explicitly chosen:
+    #
+    #   docker compose exec dbt dbt run --target prod
+    prod:
+      type: clickhouse
+      host: "{{ env_var('CLICKHOUSE_HOST', 'clickhouse') }}"
+      port: "{{ env_var('CLICKHOUSE_PORT', '8123') | int }}"
+      user: "{{ env_var('CLICKHOUSE_USER', 'default') }}"
+      password: "{{ env_var('CLICKHOUSE_PASSWORD', '') }}"
+      schema: "{{ env_var('CLICKHOUSE_DB', 'tiders') }}"
+      secure: "{{ env_var('CLICKHOUSE_SECURE', 'false') | lower == 'true' }}"
+      driver: http
+      threads: 4
+      connect_timeout: 10
+      send_receive_timeout: 300
+      custom_settings:
+        join_use_nulls: 1

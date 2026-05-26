@@ -1,0 +1,24 @@
+# Environment variables / secrets
+.env
+
+# Node
+node_modules/
+package-lock.json
+
+# Rust
+tiders-x402-server/target/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Docker
+docker-compose.override.yaml
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store

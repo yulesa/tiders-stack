@@ -1,0 +1,205 @@
+# =============================================================================
+# Tiders Stack — docker-compose.yaml
+# =============================================================================
+#
+# Quick-start:
+#   1. docker compose up --build -d
+#   2. docker compose logs -f              # watch startup
+#
+# =============================================================================
+
+services:
+
+  # ── ClickHouse database ───────────────────────────────────────────
+  clickhouse:
+    image: clickhouse/clickhouse-server:25.3
+    container_name: clickhouse
+    restart: unless-stopped
+    shm_size: 1g
+    volumes:
+      # Named volumes persist data across container restarts.
+      # To wipe the database: docker compose down -v
+      - clickhouse-data:/var/lib/clickhouse
+      - clickhouse-logs:/var/log/clickhouse-server
+      # Server-level settings overrides
+      - ./clickhouse/join_use_nulls.xml:/etc/clickhouse-server/users.d/join_use_nulls.xml:ro
+
+    environment:
+      - CLICKHOUSE_USER=${CLICKHOUSE_USER}
+      - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD}
+      - CLICKHOUSE_DB=${CLICKHOUSE_DB}
+
+    # All containers share an internal Docker network (tiders-net).
+    networks:
+      - tiders-net
+
+    # Healthcheck: the API server and ingestion wait for this before
+    # trying to connect. The /ping endpoint returns "Ok." when ready.
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8123/ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+    # Exposed Clickhouse port, useful development, give host access and Clickhouse webUI.
+    # Other services connect to ClickHouse via tiders-net.
+    # Comment for production deployment where the database is not exposed outside the Docker network.
+    ports:
+      - "8123:8123"
+
+
+  # ── Tiders ingestion service (Python) ─────────────────────────────
+  tiders-ingestion:
+    build: ./ingestion
+    container_name: tiders-ingestion
+    restart: unless-stopped
+    working_dir: /ingestion
+
+    volumes:
+      # Bind-mount the whole ingestion/ directory so local edits are
+      # immediately visible. No rebuild needed — just exec into it.
+      - ./ingestion:/ingestion
+      # Mount .env so shell scripts can source the latest values
+      # without recreating the container.
+      - ./.env:/ingestion/.env:ro
+
+    env_file:
+      - .env
+
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+
+    # Keep the container alive without running any pipeline. Use
+    # `docker compose exec` to kick off a script on demand.
+    command: ["tail", "-f", "/dev/null"]
+
+    networks:
+      - tiders-net
+
+
+  # ── dbt transformation runner ─────────────────────────────────────
+  dbt:
+    build: ./dbt
+    container_name: dbt
+    restart: unless-stopped
+    working_dir: /dbt
+
+    # The dbt/ directory is bind-mounted, so edits to models, profiles.yml,
+    # or dbt_project.yml are picked up on the next command — no rebuild.
+    volumes:
+      - ./dbt:/dbt
+
+    env_file:
+      - .env
+
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+
+    command: ["tail", "-f", "/dev/null"]
+
+    networks:
+      - tiders-net
+
+
+  # ── Tiders x402 API server ────────────────────────────────────────
+  tiders-server:
+    build:
+      context: ./tiders-x402-server
+      dockerfile: Dockerfile
+      args:
+        # Pin the server version here to avoid unexpected breaking changes. Update as needed.
+        TIDERS_VERSION: "0.3.2"
+    container_name: tiders-server
+    restart: unless-stopped
+
+    env_file:
+      - .env
+
+    volumes:
+      # Bind-mount the config so edits on the host trigger the CLI's
+      # hot-reload without rebuilding the image.
+      - ./tiders-x402-server:/etc/tiders:ro
+      # Pre-built dashboard assets (written by dashboard-builder, served here).
+      - ./dashboards:/dashboards:ro
+
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+
+    # `tiders-x402-server` is the ENTRYPOINT set in the Dockerfile;
+    # the CLI subcommand + config path go here.
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        tiders-x402-server start /etc/tiders/tiders-x402-server.yaml
+
+    networks:
+      - tiders-net
+
+    # "expose" makes port 4021 reachable from other containers on the
+    # same Docker network, but does NOT publish it to the host.
+    # External traffic reaches the server through cloudflared instead.
+    expose:
+      - "4021"
+
+
+  # ── Dashboard builder ─────────────────────────────────────────────
+  # Node.js container for building Evidence dashboard projects.
+  dashboard-builder:
+    image: node:20-slim
+    container_name: dashboard-builder
+    restart: unless-stopped
+    # Run as host user so files written into the bind-mounted ./dashboards
+    # (node_modules, .evidence cache, build output) are owned by the host
+    # user rather than root.
+    user: "1000:1000"
+    working_dir: /dashboards
+    volumes:
+      - ./dashboards:/dashboards
+    env_file:
+      - .env
+    networks:
+      - tiders-net
+    command: ["tail", "-f", "/dev/null"]
+
+
+  # ── Cloudflare Tunnel ─────────────────────────────────────────────
+  # Opens a persistent outbound connection to Cloudflare's edge so
+  # inbound traffic to your public hostname is routed to tiders-server
+  # without opening any ports on the host or router.
+  #
+  # Setup:
+  #   1. In the Cloudflare Zero Trust dashboard, create a tunnel and
+  #      add a public hostname pointing to http://tiders-server:4021.
+  #   2. Copy the tunnel token into .env as TUNNEL_TOKEN=...
+  # cloudflared:
+  #   image: cloudflare/cloudflared:latest
+  #   container_name: cloudflared
+  #   restart: unless-stopped
+
+  #   command: tunnel --no-autoupdate run --token ${TUNNEL_TOKEN}
+
+  #   env_file:
+  #     - .env
+
+  #   depends_on:
+  #     - tiders-server
+
+  #   networks:
+  #     - tiders-net
+
+
+# ── Named volumes ─────────────────────────────────────────────────
+volumes:
+  clickhouse-data:
+  clickhouse-logs:
+
+
+# ── Internal network ─────────────────────────────────────────────
+# All containers join this bridge network. They can reach each other
+# by container name (e.g. "clickhouse:8123", "tiders-server:4021").
+networks:
+  tiders-net:
+    driver: bridge

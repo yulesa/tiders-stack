@@ -1,0 +1,53 @@
+# Example tiders-x402-server configuration.
+#
+# Run with:
+#   tiders-x402-server start
+
+#
+# Environment variables can be referenced with ${VAR_NAME} syntax.
+# Set them in your shell or a .env file before starting the server.
+
+server:
+  bind_address: "0.0.0.0:4021"
+  base_url: "https://www.tiders.org/"
+
+facilitator:
+  url: "https://x402.org/facilitator"
+  # timeout: 30          # optional, request timeout in seconds
+  # headers:             # optional custom headers
+  #   X-Api-Key: "${FACILITATOR_API_KEY}"
+  # cdp_auth:              # Coinbase Developer Platform JWT auth
+  #   key_id: "${CDP_API_KEY_ID}"
+  #   key_secret: "${CDP_API_KEY_SECRET}"
+
+database:
+  # This deployment talks to the ClickHouse service defined in
+  # docker-compose.yaml, reachable by container name on tiders-net.
+  clickhouse:
+    url: "http://clickhouse:8123"
+    user: "${CLICKHOUSE_USER}"
+    password: "${CLICKHOUSE_PASSWORD}"
+    database: "${CLICKHOUSE_DB}"
+    compression: "lz4"
+
+payment:
+  max_timeout_seconds: 300
+  default_description: "Query execution payment"
+
+tables:
+  - name: raw__ethereum__token_metadata
+    price_tags: &standard_pricing
+      - type: per_row
+        pay_to: "${PAY_TO_ADDRESS}"
+        token: usdc/base
+        amount_per_item: "0.001"
+        is_default: true
+  
+dashboards:
+  root: "/dashboards"           # resolved relative to this config file; sits next to it on host and in container
+  entries:
+    - slug: polymarket            # URL-safe slug; reserved: api, assets, static
+      title: "Polymarket"         # human-readable, shown on the landing page
+      description: "All Polymarket metrics, from actions to snapshots."
+      tags: ["Prediction Market", "DeFi", "Ethereum"]
+      disabled: false
