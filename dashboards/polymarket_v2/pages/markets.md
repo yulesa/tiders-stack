@@ -7,7 +7,12 @@ Pick a market to inspect its price action, outcomes and recent trades. The list
 covers the 300 highest-volume markets in the data window.
 
 ```sql markets
-select condition_id, question, volume_usd from clickhouse.top_markets order by volume_usd desc
+select 
+  condition_id, 
+  question, 
+  volume_usd 
+from clickhouse.top_markets 
+order by volume_usd desc
 ```
 
 <Dropdown
@@ -19,8 +24,29 @@ select condition_id, question, volume_usd from clickhouse.top_markets order by v
   defaultValue={markets[0].condition_id}
 />
 
+<style>
+  /*
+    Widen the market Dropdown's selection panel — the market questions are long.
+    Evidence's Dropdown hard-codes the panel to w-[200px] (Dropdown.svelte) and
+    exposes no width prop. The panel is portaled to <body>, so the override must
+    be global. The Dropdown is the only popover using the w-[200px] + p-0 pair
+    (the default popover content is w-72), so this targets it precisely.
+  */
+  :global(.w-\[200px\].p-0) {
+    width: min(36rem, 90vw);
+  }
+</style>
+
 ```sql market_kpi
-select * from clickhouse.top_markets where condition_id = '${inputs.market.value}'
+select
+  question,
+  volume_usd,
+  trades,
+  traders,
+  avg_price,
+  polymarket_link
+from clickhouse.top_markets
+where condition_id = '${inputs.market.value}'
 ```
 
 ## <Value data={market_kpi} column=question />
@@ -29,7 +55,7 @@ select * from clickhouse.top_markets where condition_id = '${inputs.market.value
   <BigValue data={market_kpi} value=volume_usd fmt=usd0 title="Volume" />
   <BigValue data={market_kpi} value=trades fmt=num0 title="Trades" />
   <BigValue data={market_kpi} value=traders fmt=num0 title="Traders" />
-  <BigValue data={market_kpi} value=avg_price fmt=pct1 title="Avg price" />
+  <BigValue data={market_kpi} value=avg_price fmt=usd2 title="Avg price" />
 </Grid>
 
 <LinkButton url={market_kpi[0]?.polymarket_link}>View on Polymarket ↗</LinkButton>
@@ -37,7 +63,12 @@ select * from clickhouse.top_markets where condition_id = '${inputs.market.value
 ## Outcome price over time
 
 ```sql prices
-select minute::timestamp as minute, outcome, price, volume_usd, trades
+select 
+  minute::timestamp as minute,
+  outcome,
+  price,
+  volume_usd,
+  trades
 from clickhouse.market_minute_prices
 where condition_id = '${inputs.market.value}'
 order by minute
@@ -51,6 +82,7 @@ order by minute
   yFmt=pct0
   yMin=0
   yMax=1
+  handleMissing=connect
   title="VWAP price by outcome (implied probability)"
 />
 

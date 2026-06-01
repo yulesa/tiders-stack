@@ -6,14 +6,24 @@ full_width: true
 ```sql kpis
 -- The ClickHouse connector returns DateTime as strings, so cast to timestamp
 -- here (DuckDB) for Evidence to treat them as dates.
-select * replace (
+select
+  volume_usd,
+  trades,
+  traders,
+  markets,
+  fees_usd,
   first_trade::timestamp as first_trade,
   last_trade::timestamp as last_trade
-) from clickhouse.overview_kpis
+from clickhouse.overview_kpis
 ```
 
 ```sql status
-select * from clickhouse.market_status
+select
+  total_markets,
+  active_markets,
+  closed_markets,
+  neg_risk_tokens
+from clickhouse.market_status
 ```
 
 Data window: <Value data={kpis} column=first_trade fmt="hh:mm:ss" /> – <Value data={kpis} column=last_trade fmt="hh:mm:ss" /> UTC.
@@ -29,14 +39,19 @@ Data window: <Value data={kpis} column=first_trade fmt="hh:mm:ss" /> – <Value 
   <BigValue data={status} value=total_markets fmt=num0 title="Markets in catalogue" />
   <BigValue data={status} value=active_markets fmt=num0 title="Active markets" />
   <BigValue data={status} value=closed_markets fmt=num0 title="Closed markets" />
-  <BigValue data={kpis} value=fees_usd fmt=num0 title="Total Fees" />
+  <BigValue data={kpis} value=fees_usd fmt=usd0 title="Total Fees" />
 </Grid>
 
 
 ## Trading activity over time
 
 ```sql vbm
-select * replace (minute::timestamp as minute) from clickhouse.volume_by_minute
+select
+  minute::timestamp as minute,
+  volume_usd,
+  trades,
+  traders
+from clickhouse.volume_by_minute
 ```
 
 <AreaChart
@@ -57,7 +72,14 @@ select * replace (minute::timestamp as minute) from clickhouse.volume_by_minute
 ## Top markets by volume
 
 ```sql top_markets
-select * from clickhouse.top_markets
+select
+  question,
+  volume_usd,
+  trades,
+  traders,
+  avg_price,
+  polymarket_link
+from clickhouse.top_markets
 ```
 
 <BarChart
@@ -74,13 +96,18 @@ select * from clickhouse.top_markets
   <Column id=volume_usd title="Volume" fmt=usd0 contentType=colorscale />
   <Column id=trades title="Trades" fmt=num0 />
   <Column id=traders title="Traders" fmt=num0 />
-  <Column id=avg_price title="Avg price" fmt=pct1 />
+  <Column id=avg_price title="Avg price" fmt=usd2 />
 </DataTable>
 
 ## Most active traders
 
 ```sql top_traders
-select * from clickhouse.top_traders
+select
+  trader,
+  volume_usd,
+  trades,
+  markets_traded
+from clickhouse.top_traders
 ```
 
 <DataTable data={top_traders} rows=10>
@@ -93,7 +120,16 @@ select * from clickhouse.top_traders
 ## Recent trades
 
 ```sql recent
-select * replace (timestamp::timestamp as timestamp) from clickhouse.recent_trades
+select
+  timestamp::timestamp as timestamp,
+  question,
+  outcome,
+  amount_usd,
+  shares,
+  price,
+  polymarket_link
+from clickhouse.recent_trades
+order by amount_usd DESC
 ```
 
 <DataTable data={recent} rows=15 search=true link=polymarket_link>
@@ -102,13 +138,13 @@ select * replace (timestamp::timestamp as timestamp) from clickhouse.recent_trad
   <Column id=outcome title="Outcome" />
   <Column id=amount_usd title="Amount" fmt=usd2 />
   <Column id=shares title="Shares" fmt=num1 />
-  <Column id=price title="Price" fmt=pct1 />
+  <Column id=price title="Price" fmt=usd2 />
 </DataTable>
 
 <TidersDownloadButton
   label="Download recent trades"
   filename="polymarket_recent_trades.csv"
-  query={`select timestamp, question, token_outcome as outcome, amount as amount_usd, shares, price, taker from tiders.mart__polymarket_v2__trades where question is not null order by timestamp desc limit 5000`}
+  query={`select * from tiders.mart__polymarket_v2__trades order by amount desc limit 5000`}
 />
 
 [Explore an individual market →](/markets)

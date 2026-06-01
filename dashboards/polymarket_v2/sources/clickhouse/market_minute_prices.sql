@@ -14,7 +14,7 @@ select
     toStartOfMinute(t.timestamp)                as minute,
     sum(t.amount) / nullIf(sum(t.shares), 0)    as price,
     sum(t.amount)                               as volume_usd,
-    count()                                     as trades
+    toUInt32(count())                           as trades
 from tiders.mart__polymarket_v2__trades as t
 inner join top using (condition_id)
 where t.question is not null
