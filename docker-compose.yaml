@@ -133,7 +133,9 @@ services:
       # hot-reload without rebuilding the image.
       - ./tiders-x402-server:/etc/tiders:ro
       # Pre-built dashboard assets (written by dashboard-builder, served here).
-      - ./dashboards:/dashboards:ro
+      # Mounted as a sibling of /etc/tiders so the config's relative
+      # `dashboards.root: ../dashboards` resolves to /etc/dashboards.
+      - ./dashboards:/etc/dashboards:ro
 
     depends_on:
       clickhouse:

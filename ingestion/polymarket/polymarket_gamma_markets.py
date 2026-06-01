@@ -19,6 +19,7 @@ import argparse
 import json
 import os
 import time
+from collections.abc import Iterator
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -66,6 +67,36 @@ CREATE TABLE IF NOT EXISTS {{db}}.{TABLE} (
 ENGINE = ReplacingMergeTree(fetched_at)
 ORDER BY (id)
 """
+
+
+MAX_RETRIES = 4
+
+
+def _get(session, params):
+    """GET the Gamma API with retry/backoff on transient (5xx / network) errors.
+
+    Returns the parsed JSON list, or None if every attempt failed — the
+    caller is expected to skip that page/batch and carry on rather than
+    abort the whole run (earlier batches are already persisted).
+    """
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            resp = session.get(GAMMA_URL, params=params, timeout=30)
+            resp.raise_for_status()
+            return resp.json() or []
+        except (requests.HTTPError, requests.RequestException) as exc:
+            status = getattr(exc.response, "status_code", None)
+            # 4xx (other than 429) is a bad request — retrying won't help.
+            if status is not None and 400 <= status < 500 and status != 429:
+                print(f"[gamma] request failed ({status}), not retrying: {exc}")
+                return None
+            if attempt == MAX_RETRIES:
+                print(f"[gamma] request failed after {MAX_RETRIES} attempts: {exc}")
+                return None
+            backoff = 2 ** (attempt - 1)
+            print(f"[gamma] transient error ({status}), retry {attempt}/{MAX_RETRIES} in {backoff}s")
+            time.sleep(backoff)
+    return None
 
 
 def _parse_dt(value):
@@ -156,40 +187,39 @@ COLUMN_NAMES = [
 ]
 
 
-def fetch_all() -> list[dict]:
-    """Cold-start path: paginate the entire markets catalog.
+def fetch_all() -> Iterator[list[dict]]:
+    """Cold-start path: paginate the entire markets catalog, yielding each page.
 
     The default /markets endpoint is implicitly `closed=false`. Closed
     (resolved) markets are silently excluded unless `closed=true` is
-    passed, so we paginate both halves and dedupe by market id.
+    passed, so we paginate both halves. Pages are yielded as they arrive so
+    the caller can persist incrementally; any market that appears in both
+    halves is collapsed downstream by the ReplacingMergeTree on `id`.
     """
     session = requests.Session()
-    seen: dict[str, dict] = {}
     for closed in ("false", "true"):
         offset = 0
         while True:
-            resp = session.get(
-                GAMMA_URL,
-                params={"limit": PAGE_LIMIT, "offset": offset, "closed": closed},
-                timeout=30,
+            page = _get(
+                session,
+                {"limit": PAGE_LIMIT, "offset": offset, "closed": closed},
             )
-            resp.raise_for_status()
-            page = resp.json()
+            if page is None:
+                # Persistent failure on this page; skip ahead so a single bad
+                # offset doesn't strand the rest of the catalog.
+                offset += PAGE_LIMIT
+                time.sleep(0.2)
+                continue
             if not page:
                 break
-            for market in page:
-                mid = market.get("id")
-                if mid is not None:
-                    seen[str(mid)] = market
             print(
-                f"[gamma] closed={closed} offset={offset} count={len(page)} "
-                f"unique_total={len(seen)}"
+                f"[gamma] closed={closed} offset={offset} count={len(page)}"
             )
+            yield page
             if len(page) < PAGE_LIMIT:
                 break
             offset += PAGE_LIMIT
             time.sleep(0.2)
-    return list(seen.values())
 
 
 def missing_token_ids(client) -> list[str]:
@@ -221,30 +251,29 @@ def missing_token_ids(client) -> list[str]:
     return [r[0] for r in rows]
 
 
-def fetch_for_token_ids(token_ids: list[str]) -> list[dict]:
+def fetch_for_token_ids(token_ids: list[str]) -> Iterator[list[dict]]:
     """Targeted path: ask Gamma only for the markets that own these CLOB token ids.
 
     The /markets endpoint defaults to `closed=false` and silently drops
     resolved markets, so each batch is queried twice — once for open
-    markets and once for closed — and the union is deduped by market id.
+    markets and once for closed — and the union (deduped by market id) is
+    yielded per batch so the caller can persist incrementally.
     """
     session = requests.Session()
-    seen: dict[str, dict] = {}
     total_batches = (len(token_ids) + TOKEN_BATCH_SIZE - 1) // TOKEN_BATCH_SIZE
     for i in range(0, len(token_ids), TOKEN_BATCH_SIZE):
         batch = token_ids[i : i + TOKEN_BATCH_SIZE]
         batch_params = [("limit", PAGE_LIMIT)] + [
             ("clob_token_ids", tid) for tid in batch
         ]
+        seen: dict[str, dict] = {}
         got_open = got_closed = 0
         for closed, counter_name in (("false", "open"), ("true", "closed")):
-            resp = session.get(
-                GAMMA_URL,
-                params=batch_params + [("closed", closed)],
-                timeout=30,
-            )
-            resp.raise_for_status()
-            page = resp.json() or []
+            page = _get(session, batch_params + [("closed", closed)])
+            if page is None:
+                # Skip this half of the batch; persist whatever the other
+                # half returned rather than aborting the whole run.
+                continue
             for market in page:
                 mid = market.get("id")
                 if mid is not None:
@@ -257,9 +286,10 @@ def fetch_for_token_ids(token_ids: list[str]) -> list[dict]:
         batch_num = i // TOKEN_BATCH_SIZE + 1
         print(
             f"[gamma] batch {batch_num}/{total_batches} tokens={len(batch)} "
-            f"open={got_open} closed={got_closed} unique_total={len(seen)}"
+            f"open={got_open} closed={got_closed} unique={len(seen)}"
         )
-    return list(seen.values())
+        if seen:
+            yield list(seen.values())
 
 
 def main(target: str, full: bool):
@@ -279,24 +309,27 @@ def main(target: str, full: bool):
 
     if full:
         print("[gamma] --full: paginating entire markets catalog")
-        markets = fetch_all()
+        batches = fetch_all()
     else:
         token_ids = missing_token_ids(client)
         print(f"[gamma] {len(token_ids)} token ids in trades but not yet in {TABLE}")
         if not token_ids:
             print("[gamma] nothing to fetch, exiting")
             return
-        markets = fetch_for_token_ids(token_ids)
-
-    if not markets:
-        print("[gamma] no markets returned, exiting")
-        return
+        batches = fetch_for_token_ids(token_ids)
 
     fetched_at = datetime.now(tz=timezone.utc)
-    rows = [normalize(m, fetched_at) for m in markets]
+    total = 0
+    for batch in batches:
+        rows = [normalize(m, fetched_at) for m in batch]
+        client.insert(TABLE, rows, column_names=COLUMN_NAMES)
+        total += len(rows)
+        print(f"[gamma] inserted {len(rows)} rows (total {total}) into {db}.{TABLE}")
 
-    client.insert(TABLE, rows, column_names=COLUMN_NAMES)
-    print(f"[gamma] inserted {len(rows)} rows into {db}.{TABLE}")
+    if total == 0:
+        print("[gamma] no markets returned")
+    else:
+        print(f"[gamma] done — {total} rows inserted into {db}.{TABLE}")
 
 
 if __name__ == "__main__":

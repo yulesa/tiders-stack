@@ -30,7 +30,7 @@ POLYMARKET_EXCHANGE_RAW_LOGS_TABLE = "raw__polymarket__exchange__raw_logs"
 DEPLOY_BLOCK = 33605403  # earliest deploy block among the 2 exchanges contracts
 BLOCKS_TABLE = "raw__polygon__blocks"
 
-# Polygon mainnet averages ~2s per block, so 12h ≈ 21,600 blocks back from
+# Polygon mainnet averages ~2s per block, so 1h ≈ 1,800 blocks back from
 # the current chain head.
 LOOKBACK_SECONDS = 1 * 60 * 60
 POLYGON_BLOCK_TIME_SECONDS = 2
@@ -185,10 +185,14 @@ async def main(
         )
     from_block = head - LOOKBACK_BLOCKS
 
+    # This is a workaround for the fact that some providers SQD is not working properly with 
+    # stop_on_head=True on a fast-moving chain like Polygon, causing the pipeline never to terminate.
+    if to_block is None:
+        to_block = head
+
     print(
-        f"[polymarket__exchange__events.py] Running polymarket exchange events query "
-        f"for {len(POLYMARKET_EXCHANGE_ADDRESSES)} exchange addresses "
-        f"(head={head}, from_block={from_block}, lookback={LOOKBACK_BLOCKS} blocks ≈ 12h)"
+        f"[polymarket_exchange.py] Running polymarket exchange events query "
+        f"(head={head}, from_block={from_block}, lookback={LOOKBACK_BLOCKS} blocks ≈ {LOOKBACK_SECONDS // 3600}h)"
     )
 
     query = ingest.Query(
