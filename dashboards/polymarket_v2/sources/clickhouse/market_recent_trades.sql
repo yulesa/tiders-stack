@@ -15,13 +15,14 @@ ranked as (
         t.amount        as amount_usd,
         t.shares        as shares,
         t.price         as price,
-        t.taker         as taker,
+        -- Show the real user (non-exchange side), not the raw taker.
+        if(t.is_taker_side, t.maker, t.taker) as trader,
         row_number() over (partition by t.condition_id order by t.timestamp desc) as rn
     from tiders.mart__polymarket_v2__trades as t
     inner join top using (condition_id)
     where t.question is not null
 )
-select condition_id, timestamp, outcome, amount_usd, shares, price, taker
+select condition_id, timestamp, outcome, amount_usd, shares, price, trader
 from ranked
 where rn <= 100
 order by condition_id, timestamp desc

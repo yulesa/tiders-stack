@@ -35,14 +35,24 @@ payment:
   default_description: "Query execution payment"
 
 tables:
-  - name: raw__ethereum__token_metadata
+  - name: mart__polymarket_v2__market_details
     price_tags: &standard_pricing
       - type: per_row
         pay_to: "${PAY_TO_ADDRESS}"
         token: usdc/base
         amount_per_item: "0.001"
         is_default: true
-  
+  - name: mart__polymarket_v2__market_prices_daily
+    price_tags: *standard_pricing
+  - name: mart__polymarket_v2__market_prices_hourly
+    price_tags: *standard_pricing
+  - name: mart__polymarket_v2__order_filled
+    price_tags: *standard_pricing
+  - name: mart__polymarket_v2__token_conditions
+    price_tags: *standard_pricing
+  - name: mart__polymarket_v2__trades
+    price_tags: *standard_pricing
+
 dashboards:
   root: "../dashboards"         # resolved relative to this config file; maps to host ~/tiders-stack/dashboards and container /dashboards
   entries:

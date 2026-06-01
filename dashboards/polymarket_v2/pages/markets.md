@@ -1,7 +1,17 @@
 ---
 title: Market Explorer
+sidebar_position: 1
 full_width: true
 ---
+<Alert status="positive">
+  This page showcases the <a href="https://github.com/yulesa/tiders-x402-server" target="_blank" rel="noopener" style="color: #2563eb; text-decoration: underline; font-weight: 600;">Tiders-x402-Server ↗</a> in action.
+
+  To download the underlying tables, click the Tiders download button next to some datasets, check the "Explore the dataset" page, or directly connect to the API — payment is handled via <a href="https://x402.org" target="_blank" rel="noopener" style="color: #2563eb; text-decoration: underline; font-weight: 600;">x402 ↗</a>.
+</Alert>
+
+<Alert status="negative">
+  Data may be incorrect, outdated and don't represent full history of polymarket — treat paid downloads as a contribution to the project. Payments are non-refundable under any circumstances.
+</Alert>
 
 Pick a market to inspect its price action, outcomes and recent trades. The list
 covers the 300 highest-volume markets in the data window.
@@ -83,6 +93,8 @@ order by minute
   yMin=0
   yMax=1
   handleMissing=connect
+  xFmt="mmm d, hh:mm"
+  downloadableData=false
   title="VWAP price by outcome (implied probability)"
 />
 
@@ -92,16 +104,24 @@ order by minute
   y=volume_usd
   series=outcome
   yFmt=usd0
+  xFmt="mmm d, hh:mm"
+  downloadableData=false
   title="Volume per minute by outcome (USD)"
 />
 
 ## Recent trades in this market
 
 ```sql market_trades
-select timestamp::timestamp as timestamp, outcome, amount_usd, shares, price, taker
+select 
+  timestamp::timestamp as timestamp, 
+  outcome, 
+  amount_usd, 
+  shares, 
+  price, 
+  trader
 from clickhouse.market_recent_trades
 where condition_id = '${inputs.market.value}'
-order by timestamp desc
+order by amount_usd desc
 ```
 
 <DataTable data={market_trades} rows=20 search=true>
@@ -109,12 +129,12 @@ order by timestamp desc
   <Column id=outcome title="Outcome" />
   <Column id=amount_usd title="Amount" fmt=usd2 />
   <Column id=shares title="Shares" fmt=num1 />
-  <Column id=price title="Price" fmt=pct1 />
-  <Column id=taker title="Taker" />
+  <Column id=price title="Price" fmt=usd2 />
+  <Column id=trader title="Trader" />
 </DataTable>
 
 <TidersDownloadButton
   label="Download this market's trades"
   filename="polymarket_market_trades.csv"
-  query={`select timestamp, token_outcome as outcome, amount as amount_usd, shares, price, taker from tiders.mart__polymarket_v2__trades where condition_id = '${inputs.market.value}' order by timestamp desc`}
+  query={`select * from tiders.mart__polymarket_v2__trades where condition_id = '${inputs.market.value}' order by amount desc limit 5000`}
 />

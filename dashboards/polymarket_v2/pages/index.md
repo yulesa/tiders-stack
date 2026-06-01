@@ -2,6 +2,15 @@
 title: Polymarket Analytics
 full_width: true
 ---
+<Alert status="positive">
+  This page showcases the <a href="https://github.com/yulesa/tiders-x402-server" target="_blank" rel="noopener" style="color: #2563eb; text-decoration: underline; font-weight: 600;">Tiders-x402-Server ↗</a> in action.
+
+  To download the underlying tables, click the Tiders download button next to some datasets, check the "Explore the dataset" page, or directly connect to the API — payment is handled via <a href="https://x402.org" target="_blank" rel="noopener" style="color: #2563eb; text-decoration: underline; font-weight: 600;">x402 ↗</a>.
+</Alert>
+
+<Alert status="negative">
+  Data may be incorrect, outdated and don't represent full history of polymarket — treat paid downloads as a contribution to the project. Payments are non-refundable under any circumstances.
+</Alert>
 
 ```sql kpis
 -- The ClickHouse connector returns DateTime as strings, so cast to timestamp
@@ -59,6 +68,8 @@ from clickhouse.volume_by_minute
   x=minute
   y=volume_usd
   yFmt=usd0
+  xFmt="mmm d, hh:mm"
+  downloadableData=false
   title="Volume traded per minute (USD)"
 />
 
@@ -66,6 +77,8 @@ from clickhouse.volume_by_minute
   data={vbm}
   x=minute
   y={["trades","traders"]}
+  xFmt="mmm d, hh:mm"
+  downloadableData=false
   title="Trades & unique traders per minute"
 />
 
@@ -88,6 +101,7 @@ from clickhouse.top_markets
   y=volume_usd
   yFmt=usd0
   swapXY=true
+  downloadableData=false
   title="Top 15 markets — traded volume (USD)"
 />
 
@@ -148,3 +162,5 @@ order by amount_usd DESC
 />
 
 [Explore an individual market →](/markets)
+
+[Explore the full dataset →](/dataset)

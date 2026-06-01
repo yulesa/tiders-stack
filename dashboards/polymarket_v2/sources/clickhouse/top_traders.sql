@@ -1,13 +1,14 @@
--- Most active takers by traded volume.
+-- Most active users by traded volume.
+-- The real user is the non-exchange side of the fill: when the taker is the
+-- exchange contract (is_taker_side = 1) the user is the maker, else the taker.
+-- This also keeps the exchange contracts themselves out of the ranking.
 select
-    taker                   as trader,
+    if(is_taker_side, maker, taker) as trader,
     sum(amount)             as volume_usd,
     toUInt32(count())       as trades,
     toUInt32(uniqExact(condition_id)) as markets_traded,
     avg(price)              as avg_price
 from tiders.mart__polymarket_v2__trades
-where (taker != '0xe111180000d2663c0091e4f400d237545b87b996b'
-    and taker != '0xe2222d279d744050d28e00520010520000310f59')
-group by taker
+group by trader
 order by volume_usd desc
 limit 50

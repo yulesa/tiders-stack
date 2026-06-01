@@ -6,7 +6,9 @@ select
     sum(amount)                   as volume_usd,
     toUInt32(uniqExact(condition_id)) as markets,
     toUInt32(uniqExact(token_id)) as tokens,
-    toUInt32(uniqExact(taker))    as traders,
+    -- The real user is the non-exchange side of the fill: when the taker is the
+    -- exchange contract (is_taker_side = 1) the user is the maker, else the taker.
+    toUInt32(uniqExact(if(is_taker_side, maker, taker))) as traders,
     avg(price)                    as avg_price,
     sum(fee)                      as fees_usd,
     min(timestamp)                as first_trade,
