@@ -21,6 +21,7 @@ DBT_FLAGS     := $(TARGET_FLAG)
 
 polymarket_v2-ingest:
 	docker compose exec -T tiders-ingestion python polymarket/polymarket_exchange.py $(INGEST_FLAGS)
+	docker compose exec -T tiders-ingestion python polymarket/polymarket_gamma_markets.py $(INGEST_FLAGS)
 
 polymarket_v2-dbt:
 	docker compose exec -T dbt dbt run --select "*polymarket_v2*" $(DBT_FLAGS)

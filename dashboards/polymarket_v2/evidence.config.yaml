@@ -1,0 +1,12 @@
+title: polymarket_v2
+deployment:
+  basePath: /polymarket_v2
+appearance:
+  default: dark
+  switcher: true
+showEvidenceLogo: false
+plugins:
+  components:
+    "@evidence-dev/core-components": {}
+  datasources:
+    "evidence-connector-clickhouse": {}

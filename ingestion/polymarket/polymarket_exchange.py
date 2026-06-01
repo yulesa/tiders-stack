@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Optional
 
 import clickhouse_connect
-import pyarrow as pa
+import requests
 from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).parent / ".env")
@@ -24,11 +24,31 @@ from tiders_core import evm_abi_events, ingest  # noqa: E402
 
 DEFAULT_HYPERSYNC_URL = "https://polygon.hypersync.xyz/"
 DEFAULT_SQD_URL = "https://portal.sqd.dev/datasets/polygon-mainnet"
-DEFAULT_RPC_URL = "https://polygon-mainnet.gateway.tenderly.co"
+DEFAULT_RPC_URL = "https://polygon.gateway.tenderly.co"
 
 POLYMARKET_EXCHANGE_RAW_LOGS_TABLE = "raw__polymarket__exchange__raw_logs"
 DEPLOY_BLOCK = 33605403  # earliest deploy block among the 2 exchanges contracts
 BLOCKS_TABLE = "raw__polygon__blocks"
+
+# Polygon mainnet averages ~2s per block, so 12h ≈ 21,600 blocks back from
+# the current chain head.
+LOOKBACK_SECONDS = 1 * 60 * 60
+POLYGON_BLOCK_TIME_SECONDS = 2
+LOOKBACK_BLOCKS = LOOKBACK_SECONDS // POLYGON_BLOCK_TIME_SECONDS
+
+
+def _fetch_chain_head(rpc_url: str) -> int:
+    """Return the current chain head block number via eth_blockNumber."""
+    resp = requests.post(
+        rpc_url,
+        json={"jsonrpc": "2.0", "id": 1, "method": "eth_blockNumber", "params": []},
+        timeout=15,
+    )
+    resp.raise_for_status()
+    payload = resp.json()
+    if "error" in payload:
+        raise RuntimeError(f"eth_blockNumber failed: {payload['error']}")
+    return int(payload["result"], 16)
 
 POLYMARKET_EXCHANGE_ADDRESSES = [
     "0xe111180000d2663c0091e4f400237545b87b996b",  # polymarket_CTFExchange
@@ -79,7 +99,14 @@ def _polymarket_exchange_event_steps() -> list[cc.Step]:
     """Build the transformation steps for decoding all polymarket exchange event types at once."""
     steps: list[cc.Step] = []
 
-    for _, event in exchange_events.items():
+    # CTF `tokenId` is a uint256 spread across the full keccak256 range, so
+    # it cannot be stored losslessly in Decimal256 (signed Int256 underneath).
+    # Re-encode just that column as raw 32-byte binary after decoding; the
+    # HEX_ENCODE step at the end of the pipeline then turns it into a
+    # 0x-prefixed hex string.
+    TOKEN_ID_EVENTS = {"OrderFilled", "OrdersMatched"}
+
+    for name, event in exchange_events.items():
         output_table = f"raw__polymarket__exchange__event__{event['name_snake_case']}"
         steps.append(
             cc.Step(
@@ -88,11 +115,21 @@ def _polymarket_exchange_event_steps() -> list[cc.Step]:
                     event_signature=event["abi_json"],
                     input_table=POLYMARKET_EXCHANGE_RAW_LOGS_TABLE,
                     output_table=output_table,
-                    allow_decode_fail=True,
+                    allow_decode_fail=False,
                     filter_by_topic0=True,
                 ),
             ),
         )
+        if name in TOKEN_ID_EVENTS:
+            steps.append(
+                cc.Step(
+                    kind=cc.StepKind.LARGE_INT_COLUMNS_TO_BINARY,
+                    config=cc.LargeIntColumnsToBinaryConfig(
+                        table_name=output_table,
+                        columns=["tokenId"],
+                    ),
+                ),
+            )
 
     steps.append(
         cc.Step(
@@ -140,14 +177,24 @@ async def main(
         writer_index=0,          # default, can be omitted
     )
 
+    head = _fetch_chain_head(os.environ.get("RPC_URL", DEFAULT_RPC_URL))
+    if head <= 87515408:
+        raise RuntimeError(
+            f"eth_blockNumber returned implausible head={head}; "
+            f"refusing to backfill from DEPLOY_BLOCK"
+        )
+    from_block = head - LOOKBACK_BLOCKS
+
     print(
-        f"[polymarket__exchange__events.py] Running polymarket exchange events query for {len(POLYMARKET_EXCHANGE_ADDRESSES)} exchange addresses"
+        f"[polymarket__exchange__events.py] Running polymarket exchange events query "
+        f"for {len(POLYMARKET_EXCHANGE_ADDRESSES)} exchange addresses "
+        f"(head={head}, from_block={from_block}, lookback={LOOKBACK_BLOCKS} blocks ≈ 12h)"
     )
 
     query = ingest.Query(
         kind=ingest.QueryKind.EVM,
         params=ingest.evm.Query(
-            from_block=87441245,
+            from_block=from_block,
             to_block=to_block,
             logs=[
                 ingest.evm.LogRequest(

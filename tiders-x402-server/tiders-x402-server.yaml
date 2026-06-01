@@ -44,9 +44,9 @@ tables:
         is_default: true
   
 dashboards:
-  root: "/dashboards"           # resolved relative to this config file; sits next to it on host and in container
+  root: "../dashboards"         # resolved relative to this config file; maps to host ~/tiders-stack/dashboards and container /dashboards
   entries:
-    - slug: polymarket            # URL-safe slug; reserved: api, assets, static
+    - slug: polymarket_v2         # URL-safe slug; reserved: api, assets, static
       title: "Polymarket"         # human-readable, shown on the landing page
       description: "All Polymarket metrics, from actions to snapshots."
       tags: ["Prediction Market", "DeFi", "Ethereum"]

@@ -60,6 +60,12 @@ services:
     restart: unless-stopped
     working_dir: /ingestion
 
+    # Use public resolvers because the default WSL/host DNS cannot
+    # resolve some external hosts (e.g. *.polymarket.com).
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
+
     volumes:
       # Bind-mount the whole ingestion/ directory so local edits are
       # immediately visible. No rebuild needed — just exec into it.
@@ -142,6 +148,9 @@ services:
 
     networks:
       - tiders-net
+
+    ports:
+      - "4021:4021"
 
     # "expose" makes port 4021 reachable from other containers on the
     # same Docker network, but does NOT publish it to the host.

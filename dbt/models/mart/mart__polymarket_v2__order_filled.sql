@@ -4,7 +4,7 @@ SELECT
     t.timestamp AS timestamp,
     if(t.side = 0, 'BUY', 'SELL') || '-' || t.transaction_hash || '-' || t.log_index AS id,
     'CLOB trade' AS action,
-    t.token_id AS asset_id,
+    reinterpretAsUInt256(reverse(unhex(substring(t.token_id, 3)))) AS token_id,
     if(t.side = 0, toFloat64(t.maker_amount_filled), toFloat64(t.taker_amount_filled)) / 1e6 AS amount,
     if(t.side = 0, toFloat64(t.taker_amount_filled), toFloat64(t.maker_amount_filled)) / 1e6 AS shares,
     if(
