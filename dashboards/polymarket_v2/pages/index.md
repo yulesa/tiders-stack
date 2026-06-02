@@ -35,7 +35,7 @@ select
 from clickhouse.market_status
 ```
 
-Data window: <Value data={kpis} column=first_trade fmt="hh:mm:ss" /> – <Value data={kpis} column=last_trade fmt="hh:mm:ss" /> UTC.
+Data window: <Value data={kpis} column=first_trade fmt="yyyy/mm/dd hh:mm:ss" /> – <Value data={kpis} column=last_trade fmt="yyyy/mm/dd hh:mm:ss" /> UTC.
 
 <Grid cols=4>
   <BigValue data={kpis} value=volume_usd fmt=usd2m title="Traded volume" />

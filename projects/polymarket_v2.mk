@@ -27,4 +27,4 @@ polymarket_v2-dbt:
 	docker compose exec -T dbt dbt run --select "*polymarket_v2*" $(DBT_FLAGS)
 
 polymarket_v2-dashboard:
-	docker compose exec -T dashboard-builder sh -c "cd /dashboards/polymarket_v2 && npm run build"
+	docker compose exec -T dashboard-builder sh -c "cd /dashboards/polymarket_v2 && [ -d node_modules ] || npm install; npm run build"

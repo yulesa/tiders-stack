@@ -32,7 +32,7 @@ BLOCKS_TABLE = "raw__polygon__blocks"
 
 # Polygon mainnet averages ~2s per block, so 1h ≈ 1,800 blocks back from
 # the current chain head.
-LOOKBACK_SECONDS = 1 * 60 * 60
+LOOKBACK_SECONDS = 6 * 60 * 60
 POLYGON_BLOCK_TIME_SECONDS = 2
 LOOKBACK_BLOCKS = LOOKBACK_SECONDS // POLYGON_BLOCK_TIME_SECONDS
 
