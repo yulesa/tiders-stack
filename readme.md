@@ -1,6 +1,13 @@
+<img src="/resources/tiders_logo2.png" alt="Tiders" width="1000">
+
 # Tiders Stack
 
-A complete, working example of the whole infrastructure and the steps required to handle blockchain data.
+[![tiders](https://img.shields.io/badge/github-black?style=for-the-badge&logo=github)](https://github.com/yulesa/tiders)
+[![tiders-x402-server](https://img.shields.io/badge/github-black?style=for-the-badge&logo=github)](https://github.com/yulesa/tiders-rpc-client)
+[![telegram](https://img.shields.io/badge/telegram-blue?style=for-the-badge&logo=telegram)](https://github.com/yulesa/tiders-x402-server)
+
+
+A complete, working example of the whole infrastructure and the stages required to handle blockchain data.
 
 This repo takes one real dataset (Polymarket prediction-market trades on Polygon) and follows it the whole way:
 
