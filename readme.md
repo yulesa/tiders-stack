@@ -85,7 +85,7 @@ make polymarket_v2 TARGET=prod
 
 When it finishes:
 
-- **ClickHouse** is at `http://localhost:8123` (the web UI and HTTP API).
+- **ClickHouse** is at `http://localhost:8123/play` (the web UI and HTTP API).
 - **The server + dashboard** are at `http://localhost:4021`.
 
 To start over from an empty database, `docker compose down -v` wipes the named volumes.
@@ -108,17 +108,17 @@ Two scripts live in [ingestion/polymarket/](ingestion/polymarket/):
 - **[polymarket_gamma_markets.py](ingestion/polymarket/polymarket_gamma_markets.py)**:
     Polymarket doesn't store market information onchain. The human-readable market ("Will X happen?", its outcomes, slug, open/closed flags) lives offchain in Polymarket's public Gamma API. This script looks at which token ids have shown up in trades, fetches just the missing markets, and writes them to `raw__polymarket__gamma__markets` in the DB. It's a regular Python fetch script.
 
-Together they give you the two halves you need: *what happened on-chain* and *what those trades mean*.
+Together they give you the two halves you need: *what happened onchain* and *what those trades mean*.
 
-> The interesting Tiders ideas — swappable providers, Rust-powered decoding, the provider/query/steps/writer pipeline shape — are covered in the [Tiders README](https://github.com/yulesa/tiders) and docs. Here it's an example that can be easily reusable.
+> A deeper dive into Tiders is covered in the [Tiders README](https://github.com/yulesa/tiders) and [docs](https://yulesa.github.io/tiders-docs/).
 
-### 2. Transformation — turning raw events into meaningful tables
+### 2. Transformation — turning raw data into meaningful tables
 
-Raw event tables are faithful to the chain but don't reveal much on their own: hex-encoded ids, amounts in base units, no market names. The [dbt project](dbt/) reshapes them in two more layers under the models folder:
+Raw event tables are faithful to the chain but don't reveal much on their own: hex-encoded ids, amounts in base units, no market names. The [dbt/](dbt/) project reshapes them in two more layers under the models folder:
 
-- **`stg__…`** ([staging](dbt/models/stg/)) — Mostly an organizational convenience, following best practices. Thin views over each raw table. Light typing and renaming, but no business logic. One per event, plus one for the Gamma markets.
+- **`stg__…`** ([dbt/models/stg/](dbt/models/stg/)) — Mostly an organizational convenience, following best practices. Thin views over each raw table. Light typing and renaming, but no business logic. One per event, plus one for the Gamma markets.
 
-- **`mart__…`** ([mart](dbt/models/mart/)) — The business logic that leads to tables people actually want:
+- **`mart__…`** ([dbt/models/mart/](dbt/models/mart/)) — The business logic that leads to tables people actually want:
     - `mart__polymarket_v2__order_filled` — decoded CLOB fills with amounts in USD/contracts, derived price, and BUY/SELL side, one row per fill.
     - `mart__polymarket_v2__market_details` — per-token market metadata from the Gamma dump (question, outcome, slug, link, neg_risk, open/closed flags), one row per (market, outcome).
     - `mart__polymarket_v2__token_conditions` — slim `token_id → condition_id` mapping with the human-readable outcome, synthesized from the Gamma data.
@@ -130,7 +130,7 @@ The mart tables are the product. They're what the dashboard charts and what buye
 
 ### 3. Dashboard — showing buyers what they'd get
 
-Selling data is hard if nobody can see what's inside. The [Evidence](https://evidence.dev/) project in [dashboards/polymarket_v2/](dashboards/polymarket_v2/) is a static site built from mart tables: KPIs, volume-over-time charts, top markets, top traders, a per-market explorer, and a dataset preview page. 
+Selling data is hard if nobody can see what's inside. The [Evidence](https://docs.evidence.dev/) project in [dashboards/polymarket_v2/](dashboards/polymarket_v2/) is a static site built from mart tables: KPIs, volume-over-time charts, top markets, top traders, a per-market explorer, and a dataset preview page. 
 
 A [index](dashboards/index.html) file contains a static landing page with links to the multiple dashboards (this example has only one).
 
@@ -144,7 +144,7 @@ Two things make it more than a normal Evidence site:
 - A [+layout.svelte](dashboards/polymarket_v2/pages/+layout.svelte) file overrides every page and adds a connect-wallet button at the top.
 - It ships with an extra component, a **Tiders download button**. This connects the page to the paid API server (see below). Click it and the page calls the server's API; the server replies "that'll cost X", your wallet signs, and the CSV downloads.
 
-Dashboards are static — they do not update live. Whenever the underlying data changes, rebuild the project and the server picks up the new files automatically.
+Dashboards are static — they do not update live. Whenever the underlying data changes, rebuild the project (`make polymarket_v2-dashboard`) and the server picks up the new files automatically.
 
 ### 4. Server — serving the site and selling the data
 
@@ -155,12 +155,14 @@ Dashboards are static — they do not update live. Whenever the underlying data 
 
 Which tables are sold, and at what price, is set in [tiders-x402-server/tiders-x402-server.yaml](tiders-x402-server/tiders-x402-server.yaml) — this example charges per row on the six `mart__polymarket_v2__*` tables and points payments at the wallet in your `.env`.
 
+> A detail explanation of tiders-x402-server is covered in the [README](https://github.com/yulesa/tiders-x402-server) and [docs](https://yulesa.github.io/tiders-x402-server/).
+
 That's the full data loop.
 
-### 5. Data orchestration (Make files)
+### 5. Data orchestration — how to command every piece 
 
-The [Makefile](Makefile) orchestrates the per-project pipeline. Each project (here, just `polymarket_v2`) defines its stages in [projects/](projects/) folder.
-All the stages in the pipeline are manually triggered through `make` commands.
+The root [Makefile](Makefile) orchestrates the per-project pipeline. Each project (here, just `polymarket_v2`) defines its stages (sequence of execution commands) in [projects/](projects/) folder.
+All the stages in the pipeline are then manually triggered through an easier `make` commands.
 
 ```bash
 make polymarket_v2            # run the full pipeline: ingest → dbt → dashboard
@@ -173,14 +175,15 @@ Two optional variables pass through to the underlying tools:
 
 ```bash
 make polymarket_v2-ingest TO_BLOCK=22000000   # stop ingesting at a block
-make polymarket_v2 TARGET=prod                # write to the prod database, not dev (dev is default, to avoid accidental writes)
+make polymarket_v2-ingest TARGET=prod         # run ingest, but write to the prod database, not dev (dev is default, to avoid accidental writes)
+make polymarket_v2 TARGET=prod                # run all, writing to the prod database
 ```
 
 Under the hood each stage is just a sequence of `docker compose exec` into the right container — the ingestion container for the Python scripts, the `dbt` container for the models, and a Node container for the dashboard build. The containers stay running idle, so re-running a stage is fast and needs no rebuild.
 
 You can configure a new project by editing its make file in the [projects/](projects/) folder.
 
-### 6. Cloudflare (Making the dashboard a public webpage)
+### 6. Cloudflare (Extra) — connecting the server to the web
 
 The Quick Start runs everything locally. To put the dashboard and paid API on the internet without opening ports on your router, the stack includes a commented-out [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) service in [docker-compose.yaml](docker-compose.yaml):
 
