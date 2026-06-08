@@ -158,7 +158,7 @@ order by amount_usd DESC
 <TidersDownloadButton
   label="Download recent trades"
   filename="polymarket_recent_trades.csv"
-  query={`select * from tiders.mart__polymarket_v2__trades order by amount desc limit 5000`}
+  query={`select * from mart__polymarket_v2__trades order by amount desc limit 5000`}
 />
 
 [Explore an individual market →](/markets)

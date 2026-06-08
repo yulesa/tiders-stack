@@ -136,5 +136,5 @@ order by amount_usd desc
 <TidersDownloadButton
   label="Download this market's trades"
   filename="polymarket_market_trades.csv"
-  query={`select * from tiders.mart__polymarket_v2__trades where condition_id = '${inputs.market.value}' order by amount desc limit 5000`}
+  query={`select * from mart__polymarket_v2__trades where condition_id = '${inputs.market.value}' order by amount desc limit 5000`}
 />
