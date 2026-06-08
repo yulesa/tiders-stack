@@ -39,7 +39,7 @@ tables:
     price_tags: &standard_pricing
       - type: per_row
         pay_to: "${PAY_TO_ADDRESS}"
-        token: usdc/base
+        token: usdc/base_sepolia
         amount_per_item: "0.001"
         is_default: true
   - name: mart__polymarket_v2__market_prices_daily
