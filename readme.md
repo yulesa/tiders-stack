@@ -48,20 +48,7 @@ None of the choices above are locked in:
 We combine the Tiders tools with ClickHouse + dbt simply as a sensible, production-ready default. In the same way, we chose Polymarket data for its relevance and simplicity — the same stack works for any protocol or on-chain data need.
 
 
-```
-                                  ┌─────────────────────────────┐
-  blockchain ──▶ (2) Tiders ──▶   │        (1) ClickHouse       │
-  + public APIs    ingestion      │   raw → staging → mart      │
-                                  └──────────────┬──────────────┘
-                                       ▲         │
-                              (3) dbt  │         │ reads
-                              transform ┘        ▼
-                                  ┌─────────────────────────────┐
-  buyer's browser ──────────────▶│      (5) tiders-x402-server  │
-  buyer's wallet  ◀── 402 ───────│   serves (4) Evidence site   │
-                  ── pays ──────▶│   sells data via x402 API    │
-                                  └─────────────────────────────┘
-```
+<img src="/resources/stack_architecture.png" alt="stack_architecture" width="1000">
 ---
 
 ## Quick start
